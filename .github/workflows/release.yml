@@ -1,0 +1,54 @@
+name: Release
+
+# Publishes to PyPI via Trusted Publishing (OIDC) — no API token is stored
+# anywhere. Fires only when a GitHub Release is published, or when run by hand,
+# so pushing a tag alone never ships a version.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.13"
+
+      # A release that fails its own test suite should never reach PyPI.
+      - name: Test
+        run: |
+          uv sync --all-extras
+          uv run ruff check .
+          uv run ruff format --check .
+          uv run pytest -q
+
+      - name: Build
+        run: uv build
+
+      - name: Check metadata
+        run: uvx twine check dist/*
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/azure-genai-prices
+    permissions:
+      id-token: write # required for Trusted Publishing
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - uses: pypa/gh-action-pypi-publish@release/v1

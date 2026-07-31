@@ -191,6 +191,14 @@ polling more aggressively.
   scope by design — none of them is a per-token inference rate.
 - Currency is USD as published by the retail API.
 
+## Releasing
+
+Releases publish to PyPI through GitHub Actions using Trusted Publishing, so no
+API token is stored in the repo or in CI. `.github/workflows/release.yml` runs
+the test suite, builds, and uploads — triggered by publishing a GitHub Release
+(or manually via `workflow_dispatch`). Bump `version` in `pyproject.toml` and
+add a `CHANGELOG.md` entry first.
+
 ## Contributing
 
 Issues and pull requests are welcome. To work on the package:
