@@ -21,6 +21,7 @@ from .calc import calc_price
 from .calc import get_meters
 from .calc import has_long_context_pricing
 from .calc import list_models
+from .calc import list_regions
 from .meters import ParseReport
 from .meters import parse_catalog
 from .meters import parse_meter_name
@@ -35,6 +36,7 @@ from .store import refresh_from_azure
 from .store import reset
 from .store import snapshot_updated_at
 from .types import DEFAULT_LONG_CONTEXT_THRESHOLD
+from .types import AmbiguousRegionPrice
 from .types import AzurePricesError
 from .types import BillingMode
 from .types import ContextTier
@@ -51,6 +53,7 @@ __version__ = "0.1.0"
 
 __all__ = [
     "DEFAULT_LONG_CONTEXT_THRESHOLD",
+    "AmbiguousRegionPrice",
     "AzurePricesError",
     "BillingMode",
     "ContextTier",
@@ -72,6 +75,7 @@ __all__ = [
     "has_long_context_pricing",
     "is_loaded",
     "list_models",
+    "list_regions",
     "load_bundled_snapshot",
     "load_items",
     "load_prices_from_redis",

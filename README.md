@@ -31,8 +31,10 @@ configuration.
 ```python
 from azure_genai_prices import Usage, calc_price, DeploymentType, BillingMode
 
+usage = Usage(input_tokens=100_000, output_tokens=2_000, cache_read_tokens=80_000)
+
 price = calc_price(
-    Usage(input_tokens=100_000, output_tokens=2_000, cache_read_tokens=80_000),
+    usage,
     model="gpt-5.6-luna",
     deployment=DeploymentType.DATA_ZONE,  # or .GLOBAL / .REGIONAL; default GLOBAL
 )
@@ -68,15 +70,43 @@ the rest. They publish OpenAI's Global list price for a model. Azure prices the 
 model differently depending on where it is deployed, and the Data Zone premium
 varies per meter:
 
-| Model | Meter | Global | Data Zone | Premium |
+| Model | Meter | Global | Data Zone (EU/US) | Data Zone (APAC) |
 |---|---|---|---|---|
-| gpt-5.6-luna | input | $1.00 / M | $1.10 / M | 10% |
-| gpt-5.1 | input | $1.25 / M | $1.50 / M | 20% |
+| gpt-5.6-luna | input | $1.00 / M | $1.10 / M | not offered |
+| gpt-5.4-mini | input | $0.75 / M | $0.825 / M | $0.90 / M |
+| gpt-5.1 | input | $1.25 / M | $1.375 / M | $1.50 / M |
 
-Most meters carry a 10% premium; a handful — gpt-5.1 input, gpt-5.4 cached input,
-gpt-5.4-mini output — carry 20%. There is no single multiplier that converts an
-OpenAI list price into an Azure Data Zone price, which is the reason this package
-exists.
+Two things that table should make obvious. The premium is not a fixed
+percentage — it is 10% on most meters and 20% on others. And **"the Data Zone
+price" is not one number**: Azure runs several data zones and charges up to 9%
+more in APAC than in the EU/US for the same meter on the same date. There is no
+multiplier that converts an OpenAI list price into what you are billed, which is
+the reason this package exists.
+
+## Regions
+
+Where a meter is priced differently between data zones, `calc_price` refuses to
+guess:
+
+```python
+from azure_genai_prices import AmbiguousRegionPrice
+
+calc_price(usage, model="gpt-5.4-mini", deployment=DeploymentType.DATA_ZONE)
+# AmbiguousRegionPrice: '5.4 mini Inp Dz 1M Tokens' is priced differently per
+# region (8.25E-7 in centralus, eastus, eastus2 +11 more; 9E-7 in australiaeast,
+# …). Pass region= to pick one.
+
+calc_price(
+    usage, model="gpt-5.4-mini", deployment=DeploymentType.DATA_ZONE, region="northeurope"
+)  # $0.825 / M
+```
+
+Pass `region` as the ARM region id of the deployment (`northeurope`,
+`swedencentral`, `japaneast`, …). It **disambiguates rather than restricts**: for
+the ~85% of meters priced identically everywhere, an unrecognised region still
+returns the price, because Azure's published region list lags real availability.
+`list_regions(model)` shows what a model is sold in, and `Meter.is_region_dependent`
+flags the ones where it matters.
 
 ## Deployment tiers
 
@@ -85,7 +115,7 @@ exists.
 | Value | Azure deployment |
 |---|---|
 | `GLOBAL` | Global Standard / Global Provisioned — cheapest, no residency guarantee |
-| `DATA_ZONE` | Data Zone Standard — EU or US data zone residency, 10–20% premium |
+| `DATA_ZONE` | Data Zone Standard — EU, US or APAC data zone residency, 10–20% premium over Global and **not priced alike between zones** (see [Regions](#regions)) |
 | `REGIONAL` | Regional (single-region) Standard |
 
 Pick the one that matches the deployment your requests actually go to. Using the
@@ -127,7 +157,8 @@ Redis is an optional extra. If you call none of these, the bundled snapshot is u
 ```bash
 azure-genai-prices refresh [--output PATH]
 azure-genai-prices price gpt-5.6-luna --input-tokens 100000 --output-tokens 2000 --deployment data-zone
-azure-genai-prices models [--filter TEXT]
+azure-genai-prices models [--filter TEXT] [-v]
+azure-genai-prices price gpt-5.4-mini --input-tokens 1000000 --deployment data-zone --region northeurope
 azure-genai-prices coverage
 ```
 
@@ -155,7 +186,9 @@ polling more aggressively.
   Azure may follow later, or not at all, or at a different number. Do not treat this
   library's output as a proxy for OpenAI-direct pricing.
 - **Meter coverage is limited to generative AI meters** that the parser recognises.
-  Run `azure-genai-prices coverage` to see what was skipped.
+  Run `azure-genai-prices coverage` to see what was skipped. Fine-tuning, Sora
+  video, realtime audio and the retired flat-rate completion models are out of
+  scope by design — none of them is a per-token inference rate.
 - Currency is USD as published by the retail API.
 
 ## Contributing

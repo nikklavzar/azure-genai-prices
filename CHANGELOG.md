@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Region-aware pricing
+
+- `calc_price(..., region=...)` selects between Azure's data zones, which are
+  **not priced alike**: `5.4 mini Inp Dz` is $0.825/M across the EU and US and
+  $0.90/M across APAC on the same effective date. Without a region, a meter
+  whose price varies raises `AmbiguousRegionPrice` instead of guessing.
+- Superseded prices are resolved per region: Azure keeps old rows in the feed,
+  and an APAC repricing must not overwrite the EU price.
+- Every path that cannot find a rate now raises `PriceNotFound`; cached-only
+  and cache-write-only usage on a deployment with no meters previously returned
+  $0 silently.
+- `Usage` rejects negative token counts rather than producing a negative cost.
+
 ## [0.1.0] - 2026-07-31
 
 Initial release.

@@ -53,10 +53,11 @@ def fetch_price_items(
 
     owns_client = client is None
     client = client or httpx.Client(timeout=timeout)
-    items: list[dict] = []
-    # Azure repeats a meter per region; dedupe as we go so the payload we cache
-    # stays small (~20k rows collapse to a few hundred distinct meters).
-    seen: set[tuple] = set()
+    # Azure returns one row per meter PER REGION, and prices genuinely differ
+    # between regions (its data zones are not priced alike). Rows are therefore
+    # grouped by (meter, unit, price, effective date) with their regions
+    # collected, which keeps the payload small without losing the distinction.
+    grouped: dict[tuple, dict] = {}
 
     try:
         for product in products:
@@ -70,26 +71,31 @@ def fetch_price_items(
             while url:
                 payload = _get_json(client, url, params if page == 0 else None)
                 for item in payload.get("Items", []):
-                    dedupe_key = (
+                    group_key = (
                         item.get("productName"),
                         item.get("meterName"),
                         item.get("unitOfMeasure"),
                         item.get("retailPrice"),
+                        item.get("effectiveStartDate", ""),
                     )
-                    if dedupe_key in seen:
-                        continue
-                    seen.add(dedupe_key)
-                    items.append(
-                        {
+                    row = grouped.get(group_key)
+                    if row is None:
+                        row = {
                             "productName": item.get("productName", ""),
                             "meterName": item.get("meterName", ""),
                             "unitOfMeasure": item.get("unitOfMeasure", ""),
                             "retailPrice": item.get("retailPrice", 0),
                             "effectiveStartDate": item.get("effectiveStartDate", ""),
+                            "regions": [],
                         }
-                    )
+                        grouped[group_key] = row
+                    region = item.get("armRegionName", "") or ""
+                    if region not in row["regions"]:
+                        row["regions"].append(region)
                 url = payload.get("NextPageLink")
                 page += 1
+
+        items = list(grouped.values())
         logger.info(
             "azure-genai-prices: fetched %d distinct meter rows across %d products",
             len(items),

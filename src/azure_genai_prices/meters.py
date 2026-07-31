@@ -293,24 +293,22 @@ def _today() -> str:
     return datetime.now(tz=UTC).strftime("%Y-%m-%d")
 
 
-def _supersedes(candidate: Meter, incumbent: Meter, as_of: str) -> bool:
-    """Whether ``candidate`` is the more current price of the two.
+def _supersedes(candidate_date: str, incumbent_date: str, as_of: str) -> bool:
+    """Whether ``candidate_date`` is the more current of two effective dates.
 
-    Azure's retail feed returns **superseded rows alongside current ones** —
-    ``5.4 mini Inp Dz`` carries both $0.825 (effective 2026-03-01) and $0.90
-    (effective 2026-06-01). Taking whichever arrived first yields an arbitrary,
-    silently-wrong price, so the row with the latest effective date that has
-    actually taken effect wins. Rows dated in the future are announced but not
-    yet billable and never win.
+    Azure's retail feed returns **superseded rows alongside current ones** for
+    the same meter AND region. Taking whichever arrived first yields an
+    arbitrary, silently-wrong price, so the latest date that has actually taken
+    effect wins. Rows dated in the future are announced but not yet billable
+    and never win.
     """
-    cand, inc = candidate.effective_start_date, incumbent.effective_start_date
-    cand_live, inc_live = cand <= as_of, inc <= as_of
+    cand_live, inc_live = candidate_date <= as_of, incumbent_date <= as_of
     if cand_live != inc_live:
         return cand_live
     if not cand_live:
         # Both are future-dated: keep the one that starts sooner.
-        return cand < inc
-    return cand > inc
+        return candidate_date < incumbent_date
+    return candidate_date > incumbent_date
 
 
 def parse_catalog(
@@ -353,24 +351,31 @@ def parse_catalog(
             report.skipped += 1
             continue
 
-        table_key = key.as_tuple()
-        candidate = Meter(
-            key=key,
-            unit_price=retail / _unit_divisor(item.get("unitOfMeasure", "1")),
-            meter_name=meter_name,
-            product_name=product,
-            unit_of_measure=item.get("unitOfMeasure", ""),
-            retail_price=retail,
-            effective_start_date=(item.get("effectiveStartDate") or "")[:10],
-        )
+        unit_price = retail / _unit_divisor(item.get("unitOfMeasure", "1"))
+        effective = (item.get("effectiveStartDate") or "")[:10]
+        # A compacted snapshot carries a "regions" list; a raw Azure row
+        # carries one "armRegionName". Both are accepted.
+        regions = item.get("regions") or [item.get("armRegionName", "") or ""]
 
-        incumbent = table.get(table_key)
-        if incumbent is None:
-            table[table_key] = candidate
+        table_key = key.as_tuple()
+        meter = table.get(table_key)
+        if meter is None:
+            meter = Meter(
+                key=key,
+                meter_name=meter_name,
+                product_name=product,
+                unit_of_measure=item.get("unitOfMeasure", ""),
+            )
+            table[table_key] = meter
             report.parsed += 1
-        elif _supersedes(candidate, incumbent, as_of):
-            table[table_key] = candidate
-        else:
-            report.skipped += 1
+
+        for region in regions:
+            region = (region or "").strip().lower()
+            previous = meter.region_effective_dates.get(region)
+            if previous is None or _supersedes(effective, previous, as_of):
+                meter.region_prices[region] = unit_price
+                meter.region_effective_dates[region] = effective
+            else:
+                report.skipped += 1
 
     return table, report

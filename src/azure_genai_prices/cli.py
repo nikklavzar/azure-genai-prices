@@ -15,6 +15,7 @@ from .fetch import fetch_price_items
 from .store import get_report
 from .store import get_source
 from .store import load_items
+from .types import AzurePricesError
 from .types import BillingMode
 from .types import DeploymentType
 from .types import Usage
@@ -41,6 +42,14 @@ def _cmd_refresh(args: argparse.Namespace) -> int:
 
 
 def _cmd_price(args: argparse.Namespace) -> int:
+    try:
+        return _print_price(args)
+    except AzurePricesError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+
+def _print_price(args: argparse.Namespace) -> int:
     price = calc_price(
         Usage(
             input_tokens=args.input_tokens,
@@ -50,10 +59,13 @@ def _cmd_price(args: argparse.Namespace) -> int:
         model=args.model,
         deployment=DeploymentType(args.deployment.replace("-", "_")),
         mode=BillingMode(args.mode),
+        region=args.region,
     )
     print(f"model      {price.model}")
     tiers = f"{price.deployment.value}  mode {price.mode.value}"
     print(f"deployment {tiers}  context {price.context.value}")
+    if price.region:
+        print(f"region     {price.region}")
     print(f"input      ${price.input_cost:.6f}")
     print(f"output     ${price.output_cost:.6f}")
     print(f"total      ${price.total_cost:.6f}")
@@ -70,7 +82,9 @@ def _cmd_models(args: argparse.Namespace) -> int:
         if args.verbose:
             meters = get_meters(model)
             tiers = sorted({m.key.deployment.value for m in meters})
-            print(f"{model:32} {len(meters):3} meters  tiers: {', '.join(tiers)}")
+            varies = sum(1 for m in meters if m.is_region_dependent)
+            note = f"  ({varies} region-dependent)" if varies else ""
+            print(f"{model:32} {len(meters):3} meters  tiers: {', '.join(tiers)}{note}")
         else:
             print(model)
     return 0
@@ -114,6 +128,11 @@ def main(argv: list[str] | None = None) -> int:
         choices=["global", "data-zone", "data_zone", "regional"],
     )
     p_price.add_argument("--mode", default="standard", choices=[m.value for m in BillingMode])
+    p_price.add_argument(
+        "--region",
+        help="ARM region id (e.g. northeurope). Required when Azure prices the "
+        "model differently between data zones.",
+    )
     p_price.set_defaults(func=_cmd_price)
 
     p_models = sub.add_parser("models", help="list priceable models")

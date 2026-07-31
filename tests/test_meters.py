@@ -166,7 +166,7 @@ class TestSupersededPrices:
         ]
         table, _ = parse_catalog(catalog, as_of="2026-07-31")
         meter = table[("gpt-5.4-mini", "input", "data_zone", "standard", "short")]
-        assert meter.retail_price == Decimal("0.9")
+        assert meter.unit_price * 1_000_000 == Decimal("0.9")
 
     def test_row_order_does_not_matter(self):
         rows = [
@@ -175,7 +175,7 @@ class TestSupersededPrices:
         ]
         table, _ = parse_catalog(rows, as_of="2026-07-31")
         key = ("gpt-5.4-mini", "input", "data_zone", "standard", "short")
-        assert table[key].retail_price == Decimal("0.9")
+        assert table[key].unit_price * 1_000_000 == Decimal("0.9")
 
     def test_future_dated_price_does_not_apply_yet(self):
         """An announced-but-not-yet-effective price must not be billed early."""
@@ -185,7 +185,7 @@ class TestSupersededPrices:
         ]
         table, _ = parse_catalog(catalog, as_of="2026-07-31")
         key = ("gpt-5.6-luna", "input", "data_zone", "standard", "short")
-        assert table[key].retail_price == Decimal("1.1")
+        assert table[key].unit_price * 1_000_000 == Decimal("1.1")
 
     def test_as_of_can_look_forward(self):
         catalog = [
@@ -194,7 +194,7 @@ class TestSupersededPrices:
         ]
         table, _ = parse_catalog(catalog, as_of="2026-09-15")
         key = ("gpt-5.6-luna", "input", "data_zone", "standard", "short")
-        assert table[key].retail_price == Decimal("0.22")
+        assert table[key].unit_price * 1_000_000 == Decimal("0.22")
 
 
 class TestSkippingAndReporting:
