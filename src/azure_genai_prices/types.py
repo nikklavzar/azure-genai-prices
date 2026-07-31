@@ -12,9 +12,10 @@ class DeploymentType(enum.StrEnum):
     """Which Azure deployment tier a resource runs on.
 
     This is the whole reason this library exists. Azure meters the same model
-    differently per tier, and the premium is not a fixed percentage — it is
-    10% on most meters and 20% on others. Every "OpenAI price" published
-    elsewhere is the Global one.
+    differently per tier, and every "OpenAI price" published elsewhere is the
+    Global one. Note that a tier is not a single price either: the EU/US data
+    zones sit 10% over Global and APAC sits 20% over, so `DATA_ZONE` needs a
+    region whenever the two disagree — see `Meter.price_for`.
     """
 
     GLOBAL = "global"

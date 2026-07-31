@@ -76,12 +76,13 @@ varies per meter:
 | gpt-5.4-mini | input | $0.75 / M | $0.825 / M | $0.90 / M |
 | gpt-5.1 | input | $1.25 / M | $1.375 / M | $1.50 / M |
 
-Two things that table should make obvious. The premium is not a fixed
-percentage — it is 10% on most meters and 20% on others. And **"the Data Zone
-price" is not one number**: Azure runs several data zones and charges up to 9%
-more in APAC than in the EU/US for the same meter on the same date. There is no
-multiplier that converts an OpenAI list price into what you are billed, which is
-the reason this package exists.
+The point that table should make: **"the Data Zone price" is not one
+number.** Azure runs several data zones and does not price them alike. Within a
+zone the premium over Global is uniform — the EU and US zones sit at exactly
++10% on every meter, APAC at +20% — but the zones differ from each other by 9%
+on the same meter on the same date, and the retail feed distinguishes them only
+by region. Read a rate without pinning the region and you get whichever row the
+API returned first.
 
 ## Regions
 
@@ -115,7 +116,7 @@ flags the ones where it matters.
 | Value | Azure deployment |
 |---|---|
 | `GLOBAL` | Global Standard / Global Provisioned — cheapest, no residency guarantee |
-| `DATA_ZONE` | Data Zone Standard — EU, US or APAC data zone residency, 10–20% premium over Global and **not priced alike between zones** (see [Regions](#regions)) |
+| `DATA_ZONE` | Data Zone Standard — EU/US zones at +10% over Global, APAC at +20%, and **not priced alike between zones** (see [Regions](#regions)) |
 | `REGIONAL` | Regional (single-region) Standard |
 
 Pick the one that matches the deployment your requests actually go to. Using the

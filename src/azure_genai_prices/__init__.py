@@ -1,9 +1,9 @@
 """Azure AI Foundry / Azure OpenAI pricing, including Data Zone deployments.
 
 General-purpose price libraries publish OpenAI *Global* list prices. Azure
-meters each model per deployment tier, and Data Zone costs 10-20% more — not a
-fixed percentage, so it cannot be derived by scaling. This library reads the
-real meters from Azure's public retail price list.
+meters each model per deployment tier, and Data Zone costs 10-20% more — how
+much depends on which data zone, so it cannot be derived by scaling. This
+library reads the real meters from Azure's public retail price list.
 
     >>> from azure_genai_prices import Usage, calc_price, DeploymentType
     >>> price = calc_price(

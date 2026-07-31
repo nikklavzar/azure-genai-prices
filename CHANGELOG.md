@@ -5,6 +5,14 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Documentation
+
+- Corrected the Data Zone premium description. It is uniform *within* a zone —
+  EU/US at +10% over Global, APAC at +20% — not "10% on some meters and 20% on
+  others". The earlier wording came from comparing Global against APAC rows.
+
 ## [0.1.0] - 2026-07-31
 
 Initial release.
@@ -53,4 +61,5 @@ Initial release.
   snapshot parses 1024 meters with zero failures, asserted by the test suite so
   that a new Azure naming style fails the build instead of going quiet.
 
+[Unreleased]: https://github.com/nikklavzar/azure-genai-prices/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/nikklavzar/azure-genai-prices/releases/tag/v0.1.0
