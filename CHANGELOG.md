@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-08-01
+
+### Fixed
+
+- Retry on HTTP 429 and 5xx when fetching the price list. A full pull is a few
+  dozen paged requests and Azure rate-limits it, so a 429 partway through is
+  normal — but it aborted the whole fetch, which on a schedule means prices
+  silently stop updating. Backs off exponentially, honours `Retry-After`, and
+  still fails fast on a 4xx that will not fix itself.
+
 ### Documentation
 
 - Corrected the Data Zone premium description. It is uniform *within* a zone —
@@ -61,5 +71,6 @@ Initial release.
   snapshot parses 1024 meters with zero failures, asserted by the test suite so
   that a new Azure naming style fails the build instead of going quiet.
 
-[Unreleased]: https://github.com/nikklavzar/azure-genai-prices/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/nikklavzar/azure-genai-prices/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/nikklavzar/azure-genai-prices/releases/tag/v0.1.1
 [0.1.0]: https://github.com/nikklavzar/azure-genai-prices/releases/tag/v0.1.0

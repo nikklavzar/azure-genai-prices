@@ -49,7 +49,7 @@ from .types import PriceKind
 from .types import PriceNotFound
 from .types import Usage
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 
 __all__ = [
     "DEFAULT_LONG_CONTEXT_THRESHOLD",

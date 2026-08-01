@@ -9,6 +9,7 @@ schedule and share the result (see `store`), not per price calculation.
 from __future__ import annotations
 
 import logging
+import time
 from typing import Any
 
 from .meters import DEFAULT_PRODUCTS
@@ -25,11 +26,47 @@ DEFAULT_TIMEOUT = 30.0
 _FILTER_TEMPLATE = "contains(productName, '{product}')"
 
 
+#: A full pull is a few dozen paged requests and Azure rate-limits it, so 429
+#: is an expected part of a normal fetch rather than an error. 5xx is retried
+#: on the same path; anything else is a real failure and raises immediately.
+RETRY_STATUS = frozenset({429, 500, 502, 503, 504})
+MAX_RETRIES = 5
+BACKOFF_BASE_SECONDS = 2.0
+
+
+def _retry_delay(response: Any, attempt: int) -> float:
+    """Seconds to wait, preferring Azure's own Retry-After when it sends one."""
+    retry_after = response.headers.get("Retry-After") if response.headers else None
+    if retry_after:
+        try:
+            return min(float(retry_after), 60.0)
+        except (TypeError, ValueError):
+            pass
+    return min(BACKOFF_BASE_SECONDS * (2**attempt), 60.0)
+
+
 def _get_json(client: Any, url: str, params: dict | None = None) -> dict:
-    response = client.get(url, params=params) if params else client.get(url)
-    if response.status_code != 200:
-        raise RuntimeError(f"Azure retail price API returned {response.status_code} for {url}")
-    return response.json()
+    last_status = None
+    for attempt in range(MAX_RETRIES):
+        response = client.get(url, params=params) if params else client.get(url)
+        if response.status_code == 200:
+            return response.json()
+
+        last_status = response.status_code
+        if response.status_code not in RETRY_STATUS:
+            break
+
+        delay = _retry_delay(response, attempt)
+        logger.warning(
+            "azure-genai-prices: %s from the retail price API, retrying in %.1fs (attempt %d/%d)",
+            response.status_code,
+            delay,
+            attempt + 1,
+            MAX_RETRIES,
+        )
+        time.sleep(delay)
+
+    raise RuntimeError(f"Azure retail price API returned {last_status} for {url}")
 
 
 def fetch_price_items(

@@ -1,6 +1,6 @@
 [project]
 name = "azure-genai-prices"
-version = "0.1.0"
+version = "0.1.1"
 description = "Azure AI Foundry / Azure OpenAI pricing, including Data Zone deployments."
 readme = "README.md"
 license = "MIT"
