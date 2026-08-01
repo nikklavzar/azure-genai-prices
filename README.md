@@ -63,6 +63,166 @@ billed at.
 Other public names: `ContextTier`, `Price`, `Meter`, `ModelNotFound`,
 `PriceNotFound`, `list_models()`, `get_meters(model)`.
 
+## Integrations — where the token counts live
+
+Every example below does the same two things: pull the token counts out of a
+provider response, and hand them to `Usage`. The only hard part is that each
+API names those fields differently, and one of them is easy to get subtly
+wrong.
+
+**Cached tokens are a subset of the input tokens** in both the OpenAI and
+LangChain shapes — OpenAI's docs say so explicitly ("Cached tokens are
+considered a subset of the total input tokens"). `Usage` treats them the same
+way: it subtracts them out and bills only the remainder at the full rate.
+
+So pass the provider's numbers through unchanged. Subtracting the cached
+tokens from `input_tokens` yourself makes the uncached ones **disappear from
+the bill entirely** — `Usage` clamps `cache_read_tokens` to `input_tokens`, so
+a 100k-token call with an 80k cache hit costs $0.0154 instead of $0.0440, a
+65% understatement that looks perfectly plausible in a report.
+
+**Reasoning tokens need no special handling.** They are already counted inside
+`output_tokens`, and Azure bills them at the output rate.
+
+### OpenAI SDK — Responses API
+
+The current default surface. Usage is `input_tokens` / `output_tokens`, with
+cached reads nested under `input_tokens_details`.
+
+```python
+from openai import OpenAI
+from azure_genai_prices import DeploymentType, Usage, calc_price
+
+client = OpenAI()
+response = client.responses.create(model="gpt-5.6-luna", input="Hello!")
+
+u = response.usage
+price = calc_price(
+    Usage(
+        input_tokens=u.input_tokens,
+        output_tokens=u.output_tokens,
+        cache_read_tokens=u.input_tokens_details.cached_tokens,
+    ),
+    model="gpt-5.6-luna",
+    deployment=DeploymentType.DATA_ZONE,
+    region="swedencentral",
+)
+print(price.total_cost)
+```
+
+### OpenAI SDK — Chat Completions
+
+Same client, **different field names** — `prompt_tokens` / `completion_tokens`,
+with the details under `prompt_tokens_details`. Reading a Chat Completions
+response as if it were a Responses one is the most common way to end up
+recording zero cost.
+
+```python
+completion = client.chat.completions.create(
+    model="gpt-5.6-luna",
+    messages=[{"role": "user", "content": "Hello!"}],
+)
+
+u = completion.usage
+details = u.prompt_tokens_details
+usage = Usage(
+    input_tokens=u.prompt_tokens,
+    output_tokens=u.completion_tokens,
+    cache_read_tokens=getattr(details, "cached_tokens", 0) or 0,
+    # Chat Completions reports cache WRITES; the Responses API does not.
+    cache_write_tokens=getattr(details, "cache_write_tokens", 0) or 0,
+)
+```
+
+### Azure OpenAI
+
+Identical response shapes — only the client differs. The catch is that you call
+a **deployment**, and a deployment can be named anything: `calc_price` needs the
+underlying model id, not `my-prod-luna`. Keep the mapping explicit.
+
+```python
+from openai import AzureOpenAI
+
+client = AzureOpenAI(
+    azure_endpoint="https://my-resource.openai.azure.com",
+    api_key="...",
+    api_version="2026-01-01-preview",
+)
+
+DEPLOYMENT_TO_MODEL = {"my-prod-luna": "gpt-5.6-luna"}
+deployment = "my-prod-luna"
+
+response = client.responses.create(model=deployment, input="Hello!")
+u = response.usage
+price = calc_price(
+    Usage(
+        input_tokens=u.input_tokens,
+        output_tokens=u.output_tokens,
+        cache_read_tokens=u.input_tokens_details.cached_tokens,
+    ),
+    model=DEPLOYMENT_TO_MODEL[deployment],
+    deployment=DeploymentType.DATA_ZONE,
+    region="swedencentral",  # the region of the Azure resource above
+)
+```
+
+### LangChain
+
+`AIMessage.usage_metadata` is provider-independent: `input_tokens`,
+`output_tokens`, and an `input_token_details` dict whose `cache_read` key
+appears once a prefix is being reused.
+
+```python
+from langchain.chat_models import init_chat_model
+from azure_genai_prices import DeploymentType, Usage, calc_price
+
+model = init_chat_model("gpt-5.6-luna")
+message = model.invoke("Hello!")
+
+meta = message.usage_metadata
+details = meta.get("input_token_details") or {}
+price = calc_price(
+    Usage(
+        input_tokens=meta["input_tokens"],
+        output_tokens=meta["output_tokens"],
+        cache_read_tokens=details.get("cache_read", 0),
+        cache_write_tokens=details.get("cache_creation", 0),
+    ),
+    model="gpt-5.6-luna",
+    deployment=DeploymentType.DATA_ZONE,
+    region="swedencentral",
+)
+```
+
+`usage_metadata` is `None` on a streamed message unless you ask for it
+(`stream_usage=True` on the model, or aggregate the chunks) — guard for that
+before indexing, or a streaming call silently costs nothing.
+
+### langchain-azure-ai
+
+`AzureAIChatCompletionsModel` fills `usage_metadata` like any other LangChain
+model, but its raw payload sits under `response_metadata["token_usage"]` rather
+than the `["usage"]` every other integration uses. If you read the raw metadata
+(to get at a field LangChain does not surface), that difference will bite.
+
+```python
+raw = message.response_metadata.get("token_usage") or message.response_metadata.get("usage") or {}
+```
+
+### Anything else
+
+`Usage` is a plain dataclass, so adapting a shape it has not seen is a matter of
+naming four numbers:
+
+```python
+Usage(
+    input_tokens=...,  # total prompt tokens, INCLUDING cached ones
+    output_tokens=...,  # completion tokens; reasoning tokens are inside this
+    cache_read_tokens=...,  # prefix served from cache, a subset of input_tokens
+    cache_write_tokens=...,  # only where the provider reports it
+)
+```
+
 ## Why not genai-prices?
 
 `genai-prices` and similar libraries are excellent for OpenAI-direct, Anthropic and

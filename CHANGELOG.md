@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Documentation
+
+- Integration examples showing where each provider reports its token counts:
+  the OpenAI Responses API, Chat Completions (whose field names differ), Azure
+  OpenAI (where a deployment name is not a model id), LangChain, and
+  langchain-azure-ai. Pinned by `tests/test_integrations.py`, which prices the
+  same call through all three shapes and asserts they agree.
+
 ## [0.1.1] - 2026-08-01
 
 ### Fixed
